@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
 import authRoutes from './routes/auth.js';
 import submissionRoutes from './routes/submissions.js';
 import adminRoutes from './routes/admin.js';
@@ -13,69 +14,65 @@ import securityRoutes from './routes/security.js';
 import whatsappRoutes from './routes/whatsapp.js';
 import messengerRoutes from './routes/messenger.js';
 import uploadRoutes from './routes/uploads.js';
+
 import { connectDB, disconnectDB } from './config/database.js';
 
-// Security middleware (optional - install if needed)
+// Load environment variables FIRST
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+/* ─────────────────────────────
+   OPTIONAL SECURITY MIDDLEWARE
+───────────────────────────── */
 let apiLimiter, authLimiter, securityHeaders, sanitizeRequest;
+
 try {
   const security = await import('./middleware/security.js');
   apiLimiter = security.apiLimiter;
   authLimiter = security.authLimiter;
   securityHeaders = security.securityHeaders;
   sanitizeRequest = security.sanitizeRequest;
-} catch (error) {
-  console.warn('Security middleware not available, using basic setup');
-  // Basic rate limiting fallback
+} catch {
   apiLimiter = (req, res, next) => next();
   authLimiter = (req, res, next) => next();
   securityHeaders = (req, res, next) => next();
   sanitizeRequest = (req, res, next) => next();
 }
 
-// Load environment variables
-dotenv.config();
+/* ─────────────────────────────
+   GLOBAL MIDDLEWARE
+───────────────────────────── */
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+// Security headers & sanitization
+app.use(securityHeaders);
+app.use(sanitizeRequest);
 
-// Security middleware (if available)
-if (securityHeaders) app.use(securityHeaders);
-if (sanitizeRequest) app.use(sanitizeRequest);
-
-// Middleware
+// CORS (Vercel-friendly)
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting (if available)
-if (apiLimiter) {
-  app.use('/api/', apiLimiter);
-}
-if (authLimiter) {
-  app.use('/api/auth/login', authLimiter);
-  app.use('/api/auth/register', authLimiter);
-}
+// Rate limiting
+app.use('/api', apiLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
-// MongoDB Connection
+/* ─────────────────────────────
+   DATABASE
+───────────────────────────── */
 connectDB();
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\n⚠️ Shutting down gracefully...');
-  await disconnectDB();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('\n⚠️ Shutting down gracefully...');
-  await disconnectDB();
-  process.exit(0);
-});
-
-// Routes
+/* ─────────────────────────────
+   ROUTES
+───────────────────────────── */
 app.use('/api/auth', authRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/admin', adminRoutes);
@@ -89,38 +86,55 @@ app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/messenger', messengerRoutes);
 app.use('/api/uploads', uploadRoutes);
 
-// Health check
+/* ─────────────────────────────
+   HEALTH CHECK (PUBLIC)
+───────────────────────────── */
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    message: 'Mzansi Prolife API is running',
-    timestamp: new Date().toISOString()
+  res.status(200).json({
+    status: 'OK',
+    service: 'Mzansi ProLife Backend',
+    timestamp: new Date().toISOString(),
   });
 });
 
-// Error handling middleware
+/* ─────────────────────────────
+   ERROR HANDLING
+───────────────────────────── */
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Error:', err);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 
-// 404 handler
+// 404 fallback
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Route not found'
+    message: 'Route not found',
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+/* ─────────────────────────────
+   GRACEFUL SHUTDOWN
+───────────────────────────── */
+const shutdown = async () => {
+  console.log('\n⚠️ Shutting down gracefully...');
+  await disconnectDB();
+  process.exit(0);
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
+/* ─────────────────────────────
+   START SERVER (RENDER SAFE)
+───────────────────────────── */
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 API available at http://localhost:${PORT}/api`);
+  console.log(`📡 API available at /api`);
 });
 
 export default app;
-
