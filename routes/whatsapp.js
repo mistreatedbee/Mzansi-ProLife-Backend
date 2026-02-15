@@ -1,7 +1,7 @@
 import express from 'express';
 import ChatConversation from '../models/ChatConversation.js';
 import Submission from '../models/Submission.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, isAdmin } from '../middleware/auth.js';
 import { createAuditLog } from '../middleware/audit.js';
 
 const router = express.Router();
@@ -364,7 +364,7 @@ async function createSubmissionFromChat(conversation, submissionData) {
 }
 
 // Send WhatsApp message (admin endpoint)
-router.post('/send', authenticate, async (req, res) => {
+router.post('/send', authenticate, isAdmin, async (req, res) => {
   try {
     const { phoneNumber, message } = req.body;
 
@@ -398,7 +398,7 @@ router.post('/send', authenticate, async (req, res) => {
 });
 
 // Get WhatsApp conversations (admin endpoint)
-router.get('/conversations', authenticate, async (req, res) => {
+router.get('/conversations', authenticate, isAdmin, async (req, res) => {
   try {
     const conversations = await ChatConversation.find({
       'metadata.platform': 'whatsapp',

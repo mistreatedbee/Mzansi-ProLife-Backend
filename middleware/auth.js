@@ -1,6 +1,14 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  return secret;
+};
+
 export const authenticate = async (req, res, next) => {
   try {
     // Get token from header
@@ -23,7 +31,7 @@ export const authenticate = async (req, res, next) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+    const decoded = jwt.verify(token, getJwtSecret());
 
     // Get user from token
     req.user = await User.findById(decoded.id).select('-password');
@@ -56,6 +64,26 @@ export const authenticate = async (req, res, next) => {
   }
 };
 
+export const optionalAuthenticate = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next();
+    }
+
+    const token = authHeader.substring(7);
+    if (!token) {
+      return next();
+    }
+
+    const decoded = jwt.verify(token, getJwtSecret());
+    req.user = await User.findById(decoded.id).select('-password');
+    return next();
+  } catch {
+    return next();
+  }
+};
+
 export const isAdmin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();
@@ -66,4 +94,6 @@ export const isAdmin = (req, res, next) => {
     });
   }
 };
+
+export { getJwtSecret };
 

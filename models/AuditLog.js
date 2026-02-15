@@ -7,13 +7,13 @@ const auditLogSchema = new mongoose.Schema({
     enum: [
       'create', 'update', 'delete', 'login', 'logout',
       'export', 'view', 'approve', 'reject', 'assign',
-      'email_sent', 'whatsapp_sent', 'payment_verified'
+      'email_sent', 'whatsapp_sent', 'messenger_sent', 'payment_verified'
     ]
   },
   entity: {
     type: String,
     required: true,
-    enum: ['user', 'submission', 'content', 'donation', 'conversation']
+    enum: ['user', 'submission', 'content', 'donation', 'conversation', 'communication']
   },
   entityId: mongoose.Schema.Types.ObjectId,
   user: {

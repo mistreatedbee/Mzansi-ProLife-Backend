@@ -1,16 +1,16 @@
 import express from 'express';
 import crypto from 'crypto';
 import ChatConversation from '../models/ChatConversation.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // @route   POST /api/chat/conversations
 // @desc    Create or get chat conversation (supports anonymous users)
 // @access  Public (for anonymous) or Private (for authenticated)
-router.post('/conversations', async (req, res) => {
+router.post('/conversations', optionalAuthenticate, async (req, res) => {
   try {
-    const { session_id, user_name, user_phone } = req.body;
+    const { session_id, session_token, user_name, user_phone } = req.body;
     
     let conversation;
     if (session_id) {
@@ -19,10 +19,15 @@ router.post('/conversations', async (req, res) => {
     
     if (!conversation) {
       const newSessionId = session_id || crypto.randomUUID();
+      const newSessionToken = req.user ? null : crypto.randomBytes(24).toString('hex');
       const conversationData = {
         session_id: newSessionId,
         platform: 'web',
-        messages: []
+        messages: [],
+        metadata: {
+          platform: 'web',
+          sessionToken: newSessionToken
+        }
       };
 
       // If user is authenticated, use their info
@@ -38,6 +43,21 @@ router.post('/conversations', async (req, res) => {
 
       conversation = await ChatConversation.create(conversationData);
     } else {
+      // Enforce conversation ownership for existing sessions
+      if (conversation.user) {
+        if (!req.user || conversation.user.toString() !== req.user._id.toString()) {
+          return res.status(403).json({
+            success: false,
+            message: 'Access denied for this conversation'
+          });
+        }
+      } else if (!session_token || conversation.metadata?.sessionToken !== session_token) {
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid session token'
+        });
+      }
+
       // Update user info if provided
       if (user_name && !conversation.user_name) {
         conversation.user_name = user_name;
@@ -51,7 +71,8 @@ router.post('/conversations', async (req, res) => {
     res.json({
       success: true,
       data: {
-        conversation
+        conversation,
+        session_token: !conversation.user ? conversation.metadata?.sessionToken : undefined
       }
     });
   } catch (error) {
@@ -67,9 +88,9 @@ router.post('/conversations', async (req, res) => {
 // @route   POST /api/chat/messages
 // @desc    Add message to conversation (supports anonymous users)
 // @access  Public
-router.post('/messages', async (req, res) => {
+router.post('/messages', optionalAuthenticate, async (req, res) => {
   try {
-    const { session_id, role, content, options } = req.body;
+    const { session_id, session_token, role, content, options } = req.body;
 
     const conversation = await ChatConversation.findOne({ session_id });
     
@@ -77,6 +98,20 @@ router.post('/messages', async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Conversation not found'
+      });
+    }
+
+    if (conversation.user) {
+      if (!req.user || conversation.user.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied for this conversation'
+        });
+      }
+    } else if (!session_token || conversation.metadata?.sessionToken !== session_token) {
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid session token'
       });
     }
 

@@ -6,6 +6,12 @@ import Submission from '../models/Submission.js';
 
 const router = express.Router();
 
+const canAccessSubmission = (req, submission) => {
+  if (!submission || !req.user) return false;
+  if (req.user.role === 'admin') return true;
+  return submission.user && submission.user.toString() === req.user._id.toString();
+};
+
 // Configure multer for file uploads
 // In production, use cloud storage (AWS S3, Cloudinary, etc.)
 const storage = multer.diskStorage({
@@ -58,6 +64,13 @@ router.post('/submission/:submissionId', authenticate, upload.single('file'), as
       return res.status(404).json({
         success: false,
         message: 'Submission not found',
+      });
+    }
+
+    if (!canAccessSubmission(req, submission)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied',
       });
     }
 
@@ -115,6 +128,13 @@ router.get('/submission/:submissionId', authenticate, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Submission not found',
+      });
+    }
+
+    if (!canAccessSubmission(req, submission)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied',
       });
     }
 

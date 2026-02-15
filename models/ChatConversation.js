@@ -46,6 +46,7 @@ const chatConversationSchema = new mongoose.Schema({
     phoneNumber: String, // For WhatsApp
     senderId: String, // For Messenger
     platform: String,
+    sessionToken: String, // For anonymous web chat ownership
     submissionId: mongoose.Schema.Types.ObjectId,
     conversationId: String
   },

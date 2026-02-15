@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const submissionSchema = new mongoose.Schema({
   submission_type: {
@@ -17,7 +18,7 @@ const submissionSchema = new mongoose.Schema({
   },
   reference_number: {
     type: String,
-    required: true,
+    required: false,
     unique: true
   },
   status: {
@@ -120,8 +121,16 @@ submissionSchema.pre('save', function(next) {
 // Generate reference number before saving
 submissionSchema.pre('save', async function(next) {
   if (!this.reference_number) {
-    const count = await mongoose.model('Submission').countDocuments();
-    this.reference_number = `MPD-${String(count + 1).padStart(5, '0')}`;
+    let uniqueRef = null;
+    while (!uniqueRef) {
+      const candidate = `MPD-${new Date().getFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+      // eslint-disable-next-line no-await-in-loop
+      const existing = await mongoose.model('Submission').findOne({ reference_number: candidate }).select('_id');
+      if (!existing) {
+        uniqueRef = candidate;
+      }
+    }
+    this.reference_number = uniqueRef;
   }
   next();
 });

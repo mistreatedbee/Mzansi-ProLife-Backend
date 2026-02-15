@@ -2,13 +2,13 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, getJwtSecret } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Generate JWT Token
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || 'your-secret-key-change-in-production', {
+  return jwt.sign({ id }, getJwtSecret(), {
     expiresIn: '30d'
   });
 };
